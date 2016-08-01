@@ -31,9 +31,7 @@ from s2sphere import CellId, LatLng
 from google.protobuf.internal import encoder
 from geopy.geocoders import GoogleV3
 
-import urllib
 import logging
-from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)
 
