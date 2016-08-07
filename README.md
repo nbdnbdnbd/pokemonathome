@@ -10,11 +10,28 @@ receive a private key.
 Installation
 ------------
 
-Make sure you're in a python2.7 environment and run:
+Make sure you're in a Python 2.7 environment and run:
 
 ```bash
 $ git clone https://github.com/nbdnbdnbd/pokemonathome.git
 $ cd pokemonathome
+$ pip install -r requirements.txt
+```
+
+If you're not sure if about your Python environment, we recommend installing [miniconda](http://conda.pydata.org/miniconda.html):
+
+```bash
+$ cd ~
+# Replace XXX with MacOSX or Linux
+$ wget https://repo.continuum.io/miniconda/Miniconda2-latest-XXX-x86_64.sh -O miniconda2.sh
+$ chmod +x miniconda2.sh && ./miniconda2.sh
+```
+
+Then you can create a brand-new environment just for the PAH client:
+
+```bash
+$ conda create --name=pah python=2.7
+$ cd /path/to/pokemonathome
 $ pip install -r requirements.txt
 ```
 
