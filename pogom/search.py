@@ -21,7 +21,7 @@ from threading import Thread, Lock
 from queue import Queue
 
 from pgoapi import PGoApi
-from pgoapi.utilities import f2i, get_cellid
+from .utils import f2i, get_cellid
 
 from . import config
 from .models import parse_map
