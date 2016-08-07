@@ -21,11 +21,10 @@ from threading import Thread, Lock
 from queue import Queue
 
 from pgoapi import PGoApi
-from .utils import f2i, get_cellid
+from pgoapi.utilities import f2i, get_cellid
 
 from . import config
 from .models import parse_map
-
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +52,7 @@ def send_map_request(api, position):
         log.warning("Uncaught exception when downloading map " + str(e))
         return False
 
+
 def get_new_coords(init_loc, distance, bearing):
     """ Given an initial lat/lng, a distance(in kms), and a bearing (degrees),
     this will calculate the resulting lat/lng coordinates.
@@ -62,7 +62,7 @@ def get_new_coords(init_loc, distance, bearing):
 
     init_coords = [math.radians(init_loc[0]), math.radians(init_loc[1])] # convert lat/lng to radians
 
-    new_lat = math.asin( math.sin(init_coords[0])*math.cos(distance/R) +
+    new_lat = math.asin(math.sin(init_coords[0])*math.cos(distance/R) +
         math.cos(init_coords[0])*math.sin(distance/R)*math.cos(bearing))
 
     new_lon = init_coords[1] + math.atan2(math.sin(bearing)*math.sin(distance/R)*math.cos(init_coords[0]),

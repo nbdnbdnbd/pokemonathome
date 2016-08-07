@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import re
 import sys
 import getpass
 import configargparse
@@ -12,11 +11,6 @@ from datetime import datetime, timedelta
 import logging
 import shutil
 import requests
-import struct
-
-from s2sphere import CellId, LatLng
-from google.protobuf.internal import encoder
-from geopy.geocoders import GoogleV3
 
 from . import config
 
@@ -46,12 +40,14 @@ def get_args():
     parser.add_argument('-pu', '--pah-username', help='PAH Username')
     parser.add_argument('-pk', '--pah-key', help='PAH Key')
     parser.add_argument('-l', '--location', type=parse_unicode, required=True,
+
                         help='Location, can be an address or coordinates')
     parser.add_argument('-st', '--step-limit', help='Steps', type=int,
                         default=12)
     parser.add_argument('-sd', '--scan-delay',
                         help='Time delay between requests in scan threads',
-                        type=float, default=1)
+                        type=float, default=5)
+
     parser.add_argument('-td', '--thread-delay',
                         help='Time delay between each scan thread loop',
                         type=float, default=5)
@@ -95,6 +91,7 @@ def get_args():
                         action='store_true', default=False)
     parser.add_argument('-ng', '--no-gyms',
                         help='Disables Gyms from the map (including parsing them into local db)',
+
                         action='store_true', default=True)
     parser.add_argument('-nk', '--no-pokestops',
                         help='Disables PokeStops from the map (including parsing them into local db)',
@@ -123,7 +120,6 @@ def get_args():
 
     if args.pah_key is None:
         args.pah_key = getpass.getpass()
-
     return args
 
 
@@ -210,57 +206,3 @@ def send_to_webhook(message_type, message):
                 log.debug('Could not receive response from webhook')
             except requests.exceptions.RequestException as e:
                 log.debug(e)
-
-
-def f2i(float):
-    return struct.unpack('<Q', struct.pack('<d', float))[0]
-
-def f2h(float):
-    return hex(struct.unpack('<Q', struct.pack('<d', float))[0])
-
-def h2f(hex):
-    return struct.unpack('<d', struct.pack('<Q', int(hex,16)))[0]
-
-def to_camel_case(value):
-    def camelcase():
-        while True:
-            yield str.capitalize
-
-    c = camelcase()
-    return "".join(c.next()(x) if x else '_' for x in value.split("_"))
-
-
-def encode(cellid):
-    output = []
-    encoder._VarintEncoder()(output.append, cellid)
-    return ''.join(output)
-
-
-def get_pos_by_name(location_name):
-    prog = re.compile("^(\-?\d+\.\d+)?,\s*(\-?\d+\.\d+?)$")
-    res = prog.match(location_name)
-    latitude, longitude, altitude = None, None, None
-    if res:
-        latitude, longitude, altitude = float(res.group(1)), float(res.group(2)), 0
-    elif location_name:
-        geolocator = GoogleV3()
-        loc = geolocator.geocode(location_name)
-        if loc:
-            latitude, longitude, altitude = loc.latitude, loc.longitude, loc.altitude
-
-    return (latitude, longitude, altitude)
-
-
-def get_cellid(lat, long):
-    origin = CellId.from_lat_lng(LatLng.from_degrees(lat, long)).parent(15)
-    walk = [origin.id()]
-
-    # 10 before and 10 after
-    next = origin.next()
-    prev = origin.prev()
-    for i in range(10):
-        walk.append(prev.id())
-        walk.append(next.id())
-        next = next.next()
-        prev = prev.prev()
-    return ''.join(map(encode, sorted(walk)))
