@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import re
 import sys
 import getpass
 import configargparse
@@ -11,6 +12,7 @@ from datetime import datetime, timedelta
 import logging
 import shutil
 import requests
+from geopy.geocoders import GoogleV3
 
 from . import config
 
@@ -175,6 +177,52 @@ def insert_mock_data():
                    )
 
 
+def i8ln(word):
+    if config['LOCALE'] == "en":
+        return word
+    if not hasattr(i8ln, 'dictionary'):
+        file_path = os.path.join(
+            config['ROOT_PATH'],
+            config['LOCALES_DIR'],
+            '{}.min.json'.format(config['LOCALE']))
+        if os.path.isfile(file_path):
+            with open(file_path, 'r') as f:
+                i8ln.dictionary = json.loads(f.read())
+        else:
+            log.warning('Skipping translations - Unable to find locale file: %s', file_path)
+            return word
+    if word in i8ln.dictionary:
+        return i8ln.dictionary[word]
+    else:
+        log.debug('Unable to find translation for "%s" in locale %s!', word, config['LOCALE'])
+        return word
+
+
+def get_pokemon_data(pokemon_id):
+    if not hasattr(get_pokemon_data, 'pokemon'):
+        file_path = os.path.join(
+            config['ROOT_PATH'],
+            config['DATA_DIR'],
+            'pokemon.min.json')
+
+        with open(file_path, 'r') as f:
+            get_pokemon_data.pokemon = json.loads(f.read())
+    return get_pokemon_data.pokemon[str(pokemon_id)]
+
+
+def get_pokemon_name(pokemon_id):
+    return i8ln(get_pokemon_data(pokemon_id)['name'])
+
+
+def get_pokemon_rarity(pokemon_id):
+    return i8ln(get_pokemon_data(pokemon_id)['rarity'])
+
+
+def get_pokemon_types(pokemon_id):
+    pokemon_types = get_pokemon_data(pokemon_id)['types']
+    return map(lambda x: {"type": i8ln(x['type']), "color": x['color']}, pokemon_types)
+
+
 def get_pokemon_name(pokemon_id):
     if not hasattr(get_pokemon_name, 'names'):
         file_path = os.path.join(
@@ -206,3 +254,46 @@ def send_to_webhook(message_type, message):
                 log.debug('Could not receive response from webhook')
             except requests.exceptions.RequestException as e:
                 log.debug(e)
+
+
+def get_pos_by_name(location_name):
+    prog = re.compile("^(\-?\d+\.\d+)?,\s*(\-?\d+\.\d+?)$")
+    res = prog.match(location_name)
+    latitude, longitude, altitude = None, None, None
+    if res:
+        latitude, longitude, altitude = float(res.group(1)), float(res.group(2)), 0
+    elif location_name:
+        geolocator = GoogleV3()
+        loc = geolocator.geocode(location_name)
+        if loc:
+            latitude, longitude, altitude = loc.latitude, loc.longitude, loc.altitude
+
+    return (latitude, longitude, altitude)
+
+
+def get_name_by_pos(latitude, longitude):
+    geolocator = GoogleV3()
+
+    try:
+        loc = geolocator.reverse('{}, {}'.format(latitude, longitude))[0]
+    except:
+        loc = os.environ['LOCATION']
+
+    return loc.address
+
+
+def get_encryption_lib_path():
+    lib_path = ""
+    if os.name is "nt":
+        lib_path = os.path.join(os.path.dirname(__file__), "encrypt.dll")
+    elif os.name is "posix":
+        lib_path = os.path.join(os.path.dirname(__file__), "libencrypt.so")
+    else:
+        log.error("Operating system not supported")
+        return ""
+    if not os.path.isfile(lib_path):
+        log.error("Could not find encryption library [encrypt.dll (Windows) or"
+                + " libencrypt.so (Linux)]. Please make sure it's in the pogom"
+                + " directory")
+        return ""
+    return lib_path
