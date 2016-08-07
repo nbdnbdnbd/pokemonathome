@@ -40,12 +40,13 @@ Execution
 ---------
 
 ```bash
-$ python app.py -a "$AUTH_SERVICE" -u "$USERNAME" -p "$PASSWORD" -pk "$PAH_KEY" -l "$LOCATION"
+$ python app.py -a "$AUTH_SERVICE" -u "$USERNAME" -p "$PASSWORD" -pu "PAH_USER" -pk "$PAH_KEY" -l "$LOCATION"
 ```
 
 + `AUTH_SERVICE` is either `google` or `ptc`
 + `USERNAME` is your `google` or `ptc` username
 + `PASSWORD` is your `google` or `ptc` password
++ `PAH_USER` is your Pokémon@Home username
 + `PAH_KEY` is your Pokémon@Home private key
 + `LOCATION` is your desired search address (e.g. '1600 Pennsylvania Ave NW, Washington, DC')
 
