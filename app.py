@@ -8,6 +8,10 @@ import logging
 import time
 import re
 
+pgoapi_version = "1.1.6"
+logging.basicConfig(format='%(asctime)s [%(threadName)16s][%(module)14s][%(levelname)8s] %(message)s')
+log = logging.getLogger()
+
 # Assert pgoapi is installed
 try:
     import pgoapi
@@ -25,14 +29,13 @@ from threading import Thread, Event
 from queue import Queue
 
 from pogom import config
-from pogom.app import Pogom
-from pogom.utils import get_args, insert_mock_data, get_encryption_lib_path
+from pogom.utils import get_args, get_encryption_lib_path
 
-from pogom.search import search_overseer_thread, fake_search_loop
-from pogom.models import init_database, create_tables, drop_tables, Pokemon, Pokestop, Gym
+from pogom.search import search_overseer_thread
+from pogom.models import init_database, create_tables, Pokemon, Pokestop, Gym
 from pgoapi import utilities as util
 
-log = logging.getLogger(__name__)
+
 
 if __name__ == '__main__':
     # Check if we have the proper encryption library file and get its path
@@ -64,10 +67,13 @@ if __name__ == '__main__':
         logging.getLogger('pgoapi').setLevel(logging.DEBUG)
         logging.getLogger('rpc_api').setLevel(logging.DEBUG)
 
+    db = init_database()
+    create_tables(db)
 
     # use lat/lng directly if matches such a pattern
     prog = re.compile("^(\-?\d+\.\d+),?\s?(\-?\d+\.\d+)$")
     res = prog.match(args.location)
+
     if res:
         log.debug('Using coords from CLI directly')
         position = (float(res.group(1)), float(res.group(2)), 0)
