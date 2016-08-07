@@ -3,7 +3,6 @@
 
 import re
 import sys
-import getpass
 import configargparse
 import uuid
 import os
@@ -12,6 +11,10 @@ from datetime import datetime, timedelta
 import logging
 import shutil
 import requests
+from geopy.geocoders import GoogleV3
+
+from importlib import import_module
+from s2sphere import LatLng, CellId
 from geopy.geocoders import GoogleV3
 
 from . import config
@@ -27,7 +30,7 @@ def parse_unicode(bytestring):
 def verify_config_file_exists(filename):
     fullpath = os.path.join(os.path.dirname(__file__), filename)
     if not os.path.exists(fullpath):
-        log.info("Could not find " + filename + ", copying default")
+        log.info('Could not find %s, copying default', filename)
         shutil.copy2(fullpath + '.example', fullpath)
 
 
@@ -42,20 +45,24 @@ def get_args():
     parser.add_argument('-pu', '--pah-username', help='PAH Username')
     parser.add_argument('-pk', '--pah-key', help='PAH Key')
     parser.add_argument('-l', '--location', type=parse_unicode, required=True,
-
                         help='Location, can be an address or coordinates')
     parser.add_argument('-st', '--step-limit', help='Steps', type=int,
                         default=12)
     parser.add_argument('-sd', '--scan-delay',
                         help='Time delay between requests in scan threads',
                         type=float, default=5)
-
     parser.add_argument('-td', '--thread-delay',
                         help='Time delay between each scan thread loop',
-                        type=float, default=5)
+                        type=float, default=10)
     parser.add_argument('-ld', '--login-delay',
                         help='Time delay between each login attempt',
                         type=float, default=5)
+    parser.add_argument('-lr', '--login-retries',
+                        help='Number of logins attempts before refreshing a thread',
+                        type=int, default=3)
+    parser.add_argument('-sr', '--scan-retries',
+                        help='Number of retries for a given scan cell',
+                        type=int, default=5)
     parser.add_argument('-dc', '--display-in-console',
                         help='Display Found Pokemon in Console',
                         action='store_true', default=False)
@@ -80,6 +87,9 @@ def get_args():
     parser.add_argument('-os', '--only-server',
                         help='Server-Only Mode. Starts only the Webserver without the searcher.',
                         action='store_true', default=False)
+    parser.add_argument('-nsc','--no-search-control',
+                        help='Disables search control',
+                        action='store_false', dest='search_control', default=True)
     parser.add_argument('-fl', '--fixed-location',
                         help='Hides the search bar for use in shared maps.',
                         action='store_true', default=False)
@@ -87,7 +97,9 @@ def get_args():
                         action='store_true', default=False)
     parser.add_argument('-D', '--db', help='Database filename',
                         default='pogom.db')
-    parser.add_argument('-t', '--num-threads', help='Number of search threads', type=int, default=1)
+    parser.add_argument('-cd', '--clear-db',
+                        help='Deletes the existing database before starting the Webserver.',
+                        action='store_true', default=False)
     parser.add_argument('-np', '--no-pokemon',
                         help='Disables Pokemon from the map (including parsing them into local db)',
                         action='store_true', default=False)
@@ -104,6 +116,8 @@ def get_args():
     parser.add_argument('--db-user', help='Username for the database')
     parser.add_argument('--db-pass', help='Password for the database')
     parser.add_argument('--db-host', help='IP or hostname for the database')
+    parser.add_argument('--db-port', help='Port for the database', type=int, default=3306)
+    parser.add_argument('--db-max_connections', help='Max connections for the database', type=int, default=5)
     parser.add_argument('-wh', '--webhook', help='Define URL(s) to POST webhook information to',
                         nargs='*', default=False, dest='webhooks')
     parser.set_defaults(DEBUG=False)
@@ -120,32 +134,34 @@ def get_args():
         log.info('Using {} login for PAH username'.format(args.auth_service))
         args.pah_username = args.username
 
+    args.account = {'username': args.username,
+                    'password': args.password,
+                    'auth_service': args.auth_service}
+
     if args.pah_key is None:
         args.pah_key = getpass.getpass()
     return args
 
 
-def insert_mock_data():
+def insert_mock_data(position):
     num_pokemon = 6
     num_pokestop = 6
     num_gym = 6
 
-    log.info('Creating fake: {} pokemon, {} pokestops, {} gyms'.format(
-        num_pokemon, num_pokestop, num_gym))
+    log.info('Creating fake: %d pokemon, %d pokestops, %d gyms',
+        num_pokemon, num_pokestop, num_gym)
 
     from .models import Pokemon, Pokestop, Gym
     from .search import generate_location_steps
 
-    latitude, longitude = float(config['ORIGINAL_LATITUDE']),\
-        float(config['ORIGINAL_LONGITUDE'])
+    latitude, longitude = float(position[0]), float(position[1])
 
-    locations = [l for l in generate_location_steps((latitude, longitude),
-                 num_pokemon)]
+    locations = [l for l in generate_location_steps((latitude, longitude), num_pokemon)]
     disappear_time = datetime.now() + timedelta(hours=1)
 
     detect_time = datetime.now()
 
-    for i in range(num_pokemon):
+    for i in range(1, num_pokemon):
         Pokemon.create(encounter_id=uuid.uuid4(),
                        spawnpoint_id='sp{}'.format(i),
                        pokemon_id=(i+1) % 150,
@@ -154,7 +170,7 @@ def insert_mock_data():
                        disappear_time=disappear_time,
                        detect_time=detect_time)
 
-    for i in range(num_pokestop):
+    for i in range(1, num_pokestop):
         Pokestop.create(pokestop_id=uuid.uuid4(),
                         enabled=True,
                         latitude=locations[i+num_pokemon][0],
@@ -165,7 +181,7 @@ def insert_mock_data():
                         active_pokemon_id=i
                         )
 
-    for i in range(num_gym):
+    for i in range(1, num_gym):
         Gym.create(gym_id=uuid.uuid4(),
                    team_id=i % 3,
                    guard_pokemon_id=(i+1) % 150,
@@ -223,19 +239,6 @@ def get_pokemon_types(pokemon_id):
     return map(lambda x: {"type": i8ln(x['type']), "color": x['color']}, pokemon_types)
 
 
-def get_pokemon_name(pokemon_id):
-    if not hasattr(get_pokemon_name, 'names'):
-        file_path = os.path.join(
-            config['ROOT_PATH'],
-            config['LOCALES_DIR'],
-            'pokemon.{}.json'.format(config['LOCALE']))
-
-        with open(file_path, 'r') as f:
-            get_pokemon_name.names = json.loads(f.read())
-
-    return get_pokemon_name.names[str(pokemon_id)]
-
-
 def send_to_webhook(message_type, message):
     args = get_args()
 
@@ -251,7 +254,7 @@ def send_to_webhook(message_type, message):
             try:
                 requests.post(w, json=data, timeout=(None, 1))
             except requests.exceptions.ReadTimeout:
-                log.debug('Could not receive response from webhook')
+                log.debug('Response timeout on webhook endpoint %s', w)
             except requests.exceptions.RequestException as e:
                 log.debug(e)
 
@@ -284,16 +287,20 @@ def get_name_by_pos(latitude, longitude):
 
 def get_encryption_lib_path():
     lib_path = ""
-    if os.name is "nt":
+    if sys.platform == "win32":
         lib_path = os.path.join(os.path.dirname(__file__), "encrypt.dll")
-    elif os.name is "posix":
+    elif sys.platform == "darwin":
+        lib_path = os.path.join(os.path.dirname(__file__), "libencrypt-osx.so")
+    elif sys.platform.startswith('linux'):
         lib_path = os.path.join(os.path.dirname(__file__), "libencrypt.so")
     else:
-        log.error("Operating system not supported")
-        return ""
+        err = "Unexpected/unsupported platform '{}'".format(sys.platform)
+        log.error(err)
+        raise Exception(err)
+
     if not os.path.isfile(lib_path):
-        log.error("Could not find encryption library [encrypt.dll (Windows) or"
-                + " libencrypt.so (Linux)]. Please make sure it's in the pogom"
-                + " directory")
-        return ""
+        err = "Could not find {} encryption library {}".format(sys.platform, lib_path)
+        log.error(err)
+        raise Exception(err)
+
     return lib_path

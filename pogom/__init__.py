@@ -3,7 +3,7 @@
 
 config = {
     'LOCALE': 'en',
-    'LOCALES_DIR': 'static/locales',
+    'LOCALES_DIR': 'static/dist/locales',
     'ROOT_PATH': '',
     'ORIGINAL_LATITUDE': None,
     'ORIGINAL_LONGITUDE': None,
