@@ -40,7 +40,7 @@ Execution
 ---------
 
 ```bash
-$ python app.py -a "$AUTH_SERVICE" -u "$USERNAME" -p "$PASSWORD" -pu "PAH_USER" -pk "$PAH_KEY" -l "$LOCATION"
+$ python app.py -a "$AUTH_SERVICE" -u "$USERNAME" -p "$PASSWORD" -pu "$PAH_USER" -pk "$PAH_KEY" -l "$LOCATION"
 ```
 
 + `AUTH_SERVICE` is either `google` or `ptc`
@@ -51,7 +51,7 @@ $ python app.py -a "$AUTH_SERVICE" -u "$USERNAME" -p "$PASSWORD" -pu "PAH_USER" 
 + `LOCATION` is your desired search address (e.g. '1600 Pennsylvania Ave NW, Washington, DC')
 
 Then log onto [Pokemon@home](http://pokemonathome.herokuapp.com/) and reap the
-fruits of distributed labour.
+fruits of distributed labour. Or just follow us on [Twitter](https://twitter.com/PokemonAtHome).
 
 Credits
 -------
